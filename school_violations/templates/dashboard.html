@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ system_subtitle }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+    <div>
+        <h1>{{ system_name }}</h1>
+        <p>{{ system_subtitle }} | {{ system_article }}</p>
+    </div>
+    <div class="topbar-actions">
+        <a href="{{ url_for('logout') }}" class="btn btn-danger">تسجيل الخروج</a>
+    </div>
+</header>
+
+<nav class="tabs">
+    <a href="#records-section" class="tab-link active">تسجيل المخالفات</a>
+    <a href="#students-section" class="tab-link">إدارة الطالبات</a>
+    <a href="#catalog-section" class="tab-link">إدارة بنود المادة (39)</a>
+    <a href="#reports-section" class="tab-link">التقارير والإحصائيات</a>
+</nav>
+
+<main class="container">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <section class="section">
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            </section>
+        {% endif %}
+    {% endwith %}
+
+    <!-- القسم الأول -->
+    <section id="records-section" class="section">
+        <h2>🟠 تسجيل المخالفات</h2>
+
+        <div class="summary-grid mini-summary">
+            <div class="stat-card">
+                <div class="stat-title">إجمالي الطالبات</div>
+                <div class="stat-value">{{ summary.total_students }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">إجمالي السجلات</div>
+                <div class="stat-value">{{ summary.total_records }}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <form id="recordForm" method="POST" action="{{ url_for('record_save') }}">
+                <div class="grid-2">
+                    <div>
+                        <label>1) البحث عن الطالبة</label>
+                        <input type="text" id="studentSearch" placeholder="اكتبي اسم الطالبة للبحث...">
+                    </div>
+                    <div>
+                        <label>2) اختيار الطالبة ({{ summary.total_students }} طالبة)</label>
+                        <select name="student_id" id="studentSelect" required>
+                            <option value="">-- اختاري الطالبة --</option>
+                            {% for s in students %}
+                                <option value="{{ s.id }}">{{ s.student_name }}{% if s.class_name %} - {{ s.class_name }}{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-1">
+                    <div>
+                        <label>3) اختيار نوع المخالفة</label>
+                        <select name="violation_id" id="violationSelect" required>
+                            <option value="">-- اختاري المخالفة --</option>
+                            {% for v in violations %}
+                                {% if v.is_active == 1 %}
+                                    <option value="{{ v.id }}">
+                                        {{ v.title }} ({{ level_labels[v.base_level] }})
+                                    </option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="student-info-box">
+                    <h3>بيانات الطالبة</h3>
+                    <div class="grid-3">
+                        <div><strong>اسم الطالبة:</strong> <span id="info_student_name">-</span></div>
+                        <div><strong>الصف:</strong> <span id="info_class_name">-</span></div>
+                        <div><strong>ولي الأمر:</strong> <span id="info_father_name">-</span></div>
+                        <div><strong>رقم ولي الأمر:</strong> <span id="info_father_phone">-</span></div>
+                        <div><strong>اسم الأم:</strong> <span id="info_mother_name">-</span></div>
+                        <div><strong>رقم الأم:</strong> <span id="info_mother_phone">-</span></div>
+                        <div><strong>المنطقة السكنية:</strong> <span id="info_area">-</span></div>
+                        <div><strong>عدد مرات التكرار السابقة لنفس البند:</strong> <span id="info_previous_count">0</span></div>
+                    </div>
+                </div>
+
+                <div class="action-box" id="actionBox">
+                    الإجراء التلقائي سيظهر هنا
+                </div>
+
+                <div class="grid-1">
+                    <div>
+                        <label>4) ملاحظة (اختياري)</label>
+                        <textarea name="note" id="noteInput" rows="3" placeholder="اكتبي ملاحظة إن وجدت..."></textarea>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <a href="#" id="motherWhatsappBtn" class="btn btn-whatsapp disabled-link" target="_blank">إرسال واتساب للأم</a>
+                    <a href="#" id="fatherWhatsappBtn" class="btn btn-whatsapp disabled-link" target="_blank">إرسال واتساب لولي الأمر</a>
+                    <button type="submit" class="btn btn-primary">حفظ السجل</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- القسم الثاني -->
+    <section id="students-section" class="section">
+        <h2>🟠 إدارة بيانات الطالبات</h2>
+
+        <div class="grid-2">
+            <div class="card">
+                <h3>إضافة / تعديل طالبة</h3>
+                <form method="POST" action="{{ url_for('student_save') }}" id="studentForm">
+                    <input type="hidden" name="student_id" id="student_id">
+
+                    <label>اسم الطالبة</label>
+                    <input type="text" name="student_name" id="student_name" required>
+
+                    <label>الصف</label>
+                    <input type="text" name="class_name" id="class_name" placeholder="مثال: تاسع 3">
+
+                    <label>اسم ولي الأمر</label>
+                    <input type="text" name="father_name" id="father_name">
+
+                    <label>رقم ولي الأمر</label>
+                    <input type="text" name="father_phone" id="father_phone">
+
+                    <label>اسم الأم</label>
+                    <input type="text" name="mother_name" id="mother_name">
+
+                    <label>رقم الأم</label>
+                    <input type="text" name="mother_phone" id="mother_phone">
+
+                    <label>المنطقة السكنية</label>
+                    <input type="text" name="area" id="area">
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">حفظ</button>
+                        <button type="button" class="btn btn-secondary" onclick="resetStudentForm()">تفريغ</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>استيراد ملف Excel</h3>
+                <p class="hint">
+                    الأعمدة المعتمدة:
+                    الصف / اسم الطالبه الثلاثي مع القبيلة / الاسم الثلاثي ولي الامر / رقم هاتف ولي الامر /
+                    الاسم الثلاثي للأم / رقم هاتف الأم / المنطقة السكنيه
+                </p>
+                <form method="POST" action="{{ url_for('students_import') }}" enctype="multipart/form-data">
+                    <input type="file" name="excel_file" accept=".xlsx" required>
+                    <button type="submit" class="btn btn-primary">استيراد Excel</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>جدول الطالبات ({{ summary.total_students }})</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>اسم الطالبة</th>
+                            <th>الصف</th>
+                            <th>اسم ولي الأمر</th>
+                            <th>رقم ولي الأمر</th>
+                            <th>اسم الأم</th>
+                            <th>رقم الأم</th>
+                            <th>المنطقة</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in students %}
+                        <tr>
+                            <td>{{ s.student_name }}</td>
+                            <td>{{ s.class_name or '-' }}</td>
+                            <td>{{ s.father_name or '-' }}</td>
+                            <td>{{ s.father_phone or '-' }}</td>
+                            <td>{{ s.mother_name or '-' }}</td>
+                            <td>{{ s.mother_phone or '-' }}</td>
+                            <td>{{ s.area or '-' }}</td>
+                            <td class="actions-cell">
+                                <button type="button" class="btn btn-edit"
+                                    onclick='editStudent({
+                                        "id":"{{ s.id }}",
+                                        "student_name":"{{ (s.student_name or "")|e }}",
+                                        "class_name":"{{ (s.class_name or "")|e }}",
+                                        "father_name":"{{ (s.father_name or "")|e }}",
+                                        "father_phone":"{{ (s.father_phone or "")|e }}",
+                                        "mother_name":"{{ (s.mother_name or "")|e }}",
+                                        "mother_phone":"{{ (s.mother_phone or "")|e }}",
+                                        "area":"{{ (s.area or "")|e }}"
+                                    })'>
+                                    ✏ تعديل
+                                </button>
+
+                                <form method="POST" action="{{ url_for('student_delete', student_id=s.id) }}" onsubmit="return confirm('هل تريدين حذف هذه الطالبة؟')">
+                                    <button type="submit" class="btn btn-danger">🗑 حذف</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- القسم الثالث -->
+    <section id="catalog-section" class="section">
+        <h2>🟠 إدارة بنود المادة (39)</h2>
+
+        <div class="grid-2">
+            <div class="card">
+                <h3>إضافة / تعديل بند</h3>
+                <form method="POST" action="{{ url_for('catalog_save') }}" id="catalogForm">
+                    <input type="hidden" name="violation_id" id="violation_id">
+
+                    <label>اسم البند</label>
+                    <input type="text" name="title" id="violation_title" required>
+
+                    <label>المستوى</label>
+                    <select name="base_level" id="base_level" required>
+                        <option value="A">A - نصح</option>
+                        <option value="B">B - تنبيه</option>
+                        <option value="C">C - إنذار</option>
+                        <option value="D">D - فصل</option>
+                    </select>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">حفظ</button>
+                        <button type="button" class="btn btn-secondary" onclick="resetCatalogForm()">تفريغ</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>إعدادات التصعيد</h3>
+                <form method="POST" action="{{ url_for('settings_save') }}">
+                    {% set settings_map = {} %}
+                    {% for st in settings %}
+                        {% set _ = settings_map.update({st.source_level ~ '_' ~ st.target_level: st.threshold}) %}
+                    {% endfor %}
+
+                    <label>A ➜ C عند</label>
+                    <input type="number" min="1" name="a_to_c" value="{{ settings_map.get('A_C', 3) }}" required>
+
+                    <label>A ➜ D عند</label>
+                    <input type="number" min="1" name="a_to_d" value="{{ settings_map.get('A_D', 5) }}" required>
+
+                    <label>B ➜ C عند</label>
+                    <input type="number" min="1" name="b_to_c" value="{{ settings_map.get('B_C', 2) }}" required>
+
+                    <label>B ➜ D عند</label>
+                    <input type="number" min="1" name="b_to_d" value="{{ settings_map.get('B_D', 4) }}" required>
+
+                    <label>C ➜ D عند</label>
+                    <input type="number" min="1" name="c_to_d" value="{{ settings_map.get('C_D', 3) }}" required>
+
+                    <button type="submit" class="btn btn-primary">حفظ الإعدادات</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>قائمة البنود</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>اسم البند</th>
+                            <th>المستوى</th>
+                            <th>الحالة</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in violations %}
+                        <tr>
+                            <td>{{ v.title }}</td>
+                            <td>
+                                <span class="pill {{ level_classes[v.base_level] }}">
+                                    {{ level_labels[v.base_level] }}
+                                </span>
+                            </td>
+                            <td>{{ "مفعل" if v.is_active == 1 else "موقف" }}</td>
+                            <td class="actions-cell">
+                                <button type="button" class="btn btn-edit"
+                                    onclick='editCatalog({
+                                        "id":"{{ v.id }}",
+                                        "title":"{{ (v.title or "")|e }}",
+                                        "base_level":"{{ v.base_level }}"
+                                    })'>
+                                    ✏ تعديل
+                                </button>
+
+                                <form method="POST" action="{{ url_for('catalog_toggle', violation_id=v.id) }}">
+                                    <button type="submit" class="btn btn-secondary">
+                                        {{ "⛔ إيقاف" if v.is_active == 1 else "✅ تفعيل" }}
+                                    </button>
+                                </form>
+
+                                <form method="POST" action="{{ url_for('catalog_delete', violation_id=v.id) }}" onsubmit="return confirm('هل تريدين حذف هذا البند؟')">
+                                    <button type="submit" class="btn btn-danger">🗑 حذف</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- القسم الرابع -->
+    <section id="reports-section" class="section">
+        <h2>🟠 التقارير والإحصائيات</h2>
+
+        <div class="summary-grid">
+            <div class="stat-card">
+                <div class="stat-title">إجمالي المخالفات</div>
+                <div class="stat-value">{{ summary.total_records }}</div>
+            </div>
+            <div class="stat-card level-a">
+                <div class="stat-title">🟢 إجمالي نصح</div>
+                <div class="stat-value">{{ summary.a_count }}</div>
+            </div>
+            <div class="stat-card level-b">
+                <div class="stat-title">🟡 إجمالي تنبيه</div>
+                <div class="stat-value">{{ summary.b_count }}</div>
+            </div>
+            <div class="stat-card level-c">
+                <div class="stat-title">🟠 إجمالي إنذار</div>
+                <div class="stat-value">{{ summary.c_count }}</div>
+            </div>
+            <div class="stat-card level-d">
+                <div class="stat-title">🔴 إجمالي فصل</div>
+                <div class="stat-value">{{ summary.d_count }}</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <h3>تقارير ذكية</h3>
+                <ul class="smart-list">
+                    <li><strong>أكثر بند تكرارًا:</strong> {{ top_violation.title if top_violation else "-" }}</li>
+                    <li><strong>أكثر صف مخالفات:</strong> {{ top_class.class_name if top_class else "-" }}</li>
+                    <li><strong>الصف الأقل مخالفات:</strong> {{ low_class.class_name if low_class else "-" }}</li>
+                    <li><strong>أكثر طالبة تكرارًا:</strong> {{ top_student.student_name if top_student else "-" }}</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3>تنزيل Excel</h3>
+                <form method="GET" action="{{ url_for('export_excel') }}" class="grid-1">
+                    <label>حسب الصف</label>
+                    <input type="text" name="class_name" placeholder="مثال: تاسع 3">
+
+                    <label>حسب الشهر</label>
+                    <input type="month" name="month">
+
+                    <label>حسب السنة</label>
+                    <input type="number" name="year" min="2020" max="2100" placeholder="2026">
+
+                    <button type="submit" class="btn btn-primary">تنزيل Excel</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="grid-3">
+            <div class="card"><canvas id="barChart"></canvas></div>
+            <div class="card"><canvas id="pieChart"></canvas></div>
+            <div class="card"><canvas id="lineChart"></canvas></div>
+        </div>
+
+        <div class="card">
+            <h3>جدول السجلات</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>التاريخ + الوقت</th>
+                            <th>اسم الطالبة</th>
+                            <th>الصف</th>
+                            <th>نوع المخالفة</th>
+                            <th>المستوى الناتج</th>
+                            <th>ملاحظة</th>
+                            <th>حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in records %}
+                        <tr>
+                            <td>{{ r.created_at }}</td>
+                            <td>{{ r.student_name }}</td>
+                            <td>{{ r.class_name or '-' }}</td>
+                            <td>{{ r.violation_title }}</td>
+                            <td>
+                                <span class="pill {{ level_classes[r.result_level] }}">
+                                    {{ level_labels[r.result_level] }}
+                                </span>
+                            </td>
+                            <td>{{ r.note or '-' }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('record_delete', record_id=r.id) }}" onsubmit="return confirm('هل تريدين حذف السجل؟')">
+                                    <button type="submit" class="btn btn-danger">🗑 حذف</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<script>
+    const levelLabels = {{ level_labels|tojson }};
+    const byLevel = {{ by_level|map(attribute='c')|list|tojson }};
+    const levelKeys = {{ by_level|map(attribute='result_level')|list|tojson }};
+
+    const violationNames = {{ by_violation|map(attribute='title')|list|tojson }};
+    const violationCounts = {{ by_violation|map(attribute='c')|list|tojson }};
+
+    const months = {{ monthly|map(attribute='month')|list|tojson }};
+    const monthlyCounts = {{ monthly|map(attribute='c')|list|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</body>
+</html>
